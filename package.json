@@ -1,0 +1,24 @@
+{
+  "name": "github-intelligence-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "webhook": "npx smee-client -u https://smee.io/daEYa9AWpch0yaV -p 8000 -P /api/v1/webhooks/github"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "next": "^15.0.0",
+    "lucide-react": "^0.469.0",
+    "recharts": "^2.15.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0",
+    "postcss": "^8.4.30",
+    "autoprefixer": "^10.4.15"
+  }
+}
