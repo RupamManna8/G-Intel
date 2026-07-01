@@ -1,19 +1,64 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Save, Key, Check } from 'lucide-react';
+import { fetchWithAuth } from '../../lib/api';
 
 export default function Settings() {
-  const [appId, setAppId] = useState("mock_app_id");
-  const [clientId, setClientId] = useState("mock_client_id");
-  const [webhookSecret, setWebhookSecret] = useState("mock_webhook_secret");
+  const [appId, setAppId] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
 
-  const handleSave = (e) => {
-    e.preventDefault();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchWithAuth("/auth/settings");
+      setAppId(data.app_id || "");
+      setClientId(data.client_id || "");
+      setWebhookSecret(data.webhook_secret || "");
+    } catch (err) {
+      console.error(err);
+      setError("Failed to fetch settings from backend.");
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    try {
+      setError(null);
+      await fetchWithAuth("/auth/settings", {
+        method: "POST",
+        body: JSON.stringify({
+          app_id: appId,
+          client_id: clientId,
+          webhook_secret: webhookSecret
+        })
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to save settings to backend.");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-96 flex items-center justify-center text-xs uppercase tracking-widest text-secondary-text font-geist animate-pulse">
+        Retrieving Integration configurations...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 font-geist">
@@ -22,6 +67,12 @@ export default function Settings() {
         <h2 className="text-xl font-bold text-primary-text">Platform Settings</h2>
         <p className="text-xs text-secondary-text">Manage credentials, GitHub App credentials scope, and webhook routing triggers</p>
       </div>
+
+      {error && (
+        <div className="p-4 bg-danger/10 border border-danger/30 text-danger rounded-lg text-xs max-w-2xl">
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSave} className="p-6 bg-card border border-border rounded-lg space-y-6 max-w-2xl font-geist text-xs">
         <h3 className="text-sm font-semibold tracking-wide text-primary-text uppercase flex items-center gap-2 border-b border-border pb-3">

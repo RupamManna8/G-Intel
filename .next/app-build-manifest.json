@@ -56,6 +56,11 @@
       "static/chunks/main-app.js",
       "static/chunks/app/automation/page.js"
     ],
+    "/agent-console/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/agent-console/page.js"
+    ],
     "/reports/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { FolderGit, CheckCircle, RefreshCw, AlertTriangle, Plus, Check, Github } from 'lucide-react';
+import { FolderGit, CheckCircle, RefreshCw, AlertTriangle, Plus, Check, Github, Clock } from 'lucide-react';
 import { fetchWithAuth } from '../../lib/api';
 
 export default function Repositories() {
@@ -174,6 +174,10 @@ export default function Repositories() {
                             ) : repo.onboarding_status === "SCANNING" ? (
                               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-info/20 text-info font-semibold text-[10px] animate-pulse">
                                 <RefreshCw className="h-3 w-3 animate-spin" /> Scanning
+                              </span>
+                            ) : repo.onboarding_status === "PENDING" ? (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-warning/20 text-warning font-semibold text-[10px]">
+                                <Clock className="h-3 w-3" /> Queued
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-danger/20 text-danger font-semibold text-[10px]">

@@ -105,6 +105,24 @@ export default function Dashboard() {
     }
   };
 
+  const triggerScan = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      await fetchWithAuth("/repositories/onboard", {
+        method: "POST",
+        body: JSON.stringify({ 
+          full_name: activeRepoName 
+        })
+      });
+      await fetchDashboardData(activeRepoId);
+    } catch (err) {
+      console.error(err);
+      setError(`Failed to trigger scan for ${activeRepoName}.`);
+      setLoading(false);
+    }
+  };
+
   if (!activeRepoId) {
     return (
       <div className="flex flex-col items-center justify-center h-96 border border-dashed border-border rounded-lg bg-card text-center p-6 space-y-4 font-geist">
@@ -127,6 +145,25 @@ export default function Dashboard() {
     return (
       <div className="min-h-96 flex items-center justify-center text-xs uppercase tracking-widest text-secondary-text font-geist animate-pulse">
         Fetching Repository Analytics Telemetry...
+      </div>
+    );
+  }
+
+  if (repoStatus && repoStatus.onboarding_status === "PENDING") {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 border border-dashed border-border rounded-lg bg-card text-center p-6 space-y-4 font-geist">
+        <Clock className="h-10 w-10 text-warning animate-pulse" />
+        <h3 className="text-sm font-bold text-primary-text uppercase tracking-wide">Repository Scan Queued</h3>
+        <p className="text-xs text-secondary-text max-w-md leading-relaxed">
+          The codebase for <strong>{activeRepoName}</strong> is currently awaiting a slot in the scanning queue.<br/>
+          You can trigger the deep static code analysis and AST generation immediately below.
+        </p>
+        <button
+          onClick={triggerScan}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-info text-primary-text font-bold text-xs rounded hover:bg-info/90 transition-colors"
+        >
+          <RefreshCw className="h-3.5 w-3.5" /> Start Scan Now
+        </button>
       </div>
     );
   }

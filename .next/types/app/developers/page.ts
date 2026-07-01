@@ -1,4 +1,4 @@
-// File: D:\GIntelligence Platform\frontend\src\app\developers\page.js
+// File: D:\GIntelligence-Platform\frontend\src\app\developers\page.js
 import * as entry from '../../../../src/app/developers/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

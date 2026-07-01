@@ -14,7 +14,8 @@ import {
   CalendarDays, 
   Cpu, 
   FilePieChart, 
-  Settings 
+  Settings,
+  Terminal
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -39,6 +40,7 @@ export default function Sidebar() {
     { name: 'Developers', href: '/developers', icon: Users },
     { name: 'Sprint Planning', href: '/sprint-planning', icon: CalendarDays },
     { name: 'Automation', href: '/automation', icon: Cpu },
+    { name: 'AI Agent Console', href: '/agent-console', icon: Terminal },
     { name: 'Reports', href: '/reports', icon: FilePieChart },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];

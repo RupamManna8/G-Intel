@@ -13,6 +13,9 @@ export default function PullRequests() {
   const [selectedPr, setSelectedPr] = useState(null);
   const [selectedPrDetails, setSelectedPrDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [impactAnalysis, setImpactAnalysis] = useState(null);
+  const [impactLoading, setImpactLoading] = useState(false);
+  const [reviewLoading, setReviewLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -41,13 +44,15 @@ export default function PullRequests() {
 
   const handleSelectPr = async (pr) => {
     setSelectedPr(pr);
+    setSelectedPrDetails(null);
+    setImpactAnalysis(null);
+    
     try {
       setDetailsLoading(true);
       const details = await fetchWithAuth(`/analytics/pull-requests/${pr.id}/risk`);
       setSelectedPrDetails(details);
     } catch (err) {
       console.error(err);
-      // Fallback fallback details display in case of minor error
       setSelectedPrDetails({
         risk_score: pr.risk_score || 15.0,
         risk_level: pr.risk_score > 70 ? "HIGH" : pr.risk_score > 35 ? "MEDIUM" : "LOW",
@@ -58,6 +63,43 @@ export default function PullRequests() {
       });
     } finally {
       setDetailsLoading(false);
+    }
+
+    try {
+      setImpactLoading(true);
+      const changedFilesList = pr.changed_files && pr.changed_files.length > 0 ? pr.changed_files : ["backend/auth.py"];
+      const impactData = await fetchWithAuth(`/repositories/impact-analysis`, {
+        method: "POST",
+        body: JSON.stringify({
+          repository_id: activeRepoId === "all" ? pr.repository_id || "" : activeRepoId,
+          changed_files: changedFilesList
+        })
+      });
+      setImpactAnalysis(impactData);
+    } catch (err) {
+      console.error("Failed to fetch change impact analysis:", err);
+    } finally {
+      setImpactLoading(false);
+    }
+  };
+
+  const triggerPrReview = async (prId) => {
+    try {
+      setReviewLoading(true);
+      await fetchWithAuth(`/repositories/pull-requests/review`, {
+        method: "POST",
+        body: JSON.stringify({
+          pull_request_id: prId
+        })
+      });
+      // Wait briefly for execution and reload
+      const details = await fetchWithAuth(`/analytics/pull-requests/${prId}/risk`);
+      setSelectedPrDetails(details);
+      fetchPRs(activeRepoId);
+    } catch (err) {
+      console.error("Failed to trigger pull request review:", err);
+    } finally {
+      setReviewLoading(false);
     }
   };
 
@@ -162,16 +204,27 @@ export default function PullRequests() {
             </div>
           ) : selectedPr && selectedPrDetails ? (
             <div className="space-y-6 text-xs">
-              <div>
-                <div className="text-[10px] text-secondary-text uppercase mb-1">Risk Score</div>
-                <div className="text-2xl font-black text-primary-text flex items-center gap-2">
-                  <span>{selectedPrDetails.risk_score}%</span>
-                  <span className={`text-xs px-2 py-0.5 rounded font-bold ${
-                    selectedPrDetails.risk_score > 70 ? 'bg-danger/20 text-danger' : selectedPrDetails.risk_score > 35 ? 'bg-warning/20 text-warning' : 'bg-success/20 text-success'
-                  }`}>
-                    {selectedPrDetails.risk_level}
-                  </span>
+              <div className="flex justify-between items-center bg-secondary-bg border border-border p-3 rounded">
+                <div>
+                  <div className="text-[10px] text-secondary-text uppercase mb-1">Risk Score</div>
+                  <div className="text-2xl font-black text-primary-text flex items-center gap-2">
+                    <span>{selectedPrDetails.risk_score}%</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                      selectedPrDetails.risk_score > 70 ? 'bg-danger/20 text-danger' : selectedPrDetails.risk_score > 35 ? 'bg-warning/20 text-warning' : 'bg-success/20 text-success'
+                    }`}>
+                      {selectedPrDetails.risk_level}
+                    </span>
+                  </div>
                 </div>
+                <button
+                  disabled={reviewLoading}
+                  onClick={() => triggerPrReview(selectedPr.id)}
+                  className={`px-4 py-2 text-xs font-bold rounded text-primary-text transition-colors flex items-center gap-1.5 ${
+                    reviewLoading ? 'bg-info/50 cursor-not-allowed' : 'bg-info hover:bg-info/90'
+                  }`}
+                >
+                  {reviewLoading ? "Reviewing..." : "Trigger AI Review"}
+                </button>
               </div>
 
               <div>
@@ -202,6 +255,60 @@ export default function PullRequests() {
                   <Info className="h-3.5 w-3.5 text-info" /> AI Recommendation
                 </div>
                 <p className="text-secondary-text leading-relaxed font-geist">{selectedPrDetails.explainable_reasoning}</p>
+              </div>
+
+              {/* Code Blast Radius */}
+              <div className="border-t border-border pt-4 mt-4 space-y-3">
+                <div className="text-[10px] text-secondary-text uppercase font-semibold">Change Impact Blast Radius</div>
+                {impactLoading ? (
+                  <div className="text-[10px] text-secondary-text animate-pulse">Running Blast Radius Analysis...</div>
+                ) : impactAnalysis ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-[10px] text-secondary-text">
+                      <span>Impact Risk Score:</span>
+                      <strong className="text-warning font-mono font-bold text-xs">{impactAnalysis.impact_risk_score.toFixed(1)}%</strong>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] text-secondary-text">
+                      <span>Impacted Elements:</span>
+                      <strong className="text-primary-text font-bold">{impactAnalysis.total_impacted_elements} elements</strong>
+                    </div>
+                    
+                    {impactAnalysis.affected_files && impactAnalysis.affected_files.length > 0 && (
+                      <div className="bg-secondary-bg border border-border p-2 rounded">
+                        <span className="text-[9px] text-secondary-text block mb-1 uppercase font-semibold">Affected Files</span>
+                        <div className="max-h-24 overflow-y-auto space-y-1 font-mono text-[9px] text-info">
+                          {impactAnalysis.affected_files.map((f, idx) => (
+                            <div key={idx} className="truncate" title={f.file_path || f.name || f.id}>{f.name || f.file_path || f.id}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {impactAnalysis.affected_classes && impactAnalysis.affected_classes.length > 0 && (
+                      <div className="bg-secondary-bg border border-border p-2 rounded">
+                        <span className="text-[9px] text-secondary-text block mb-1 uppercase font-semibold">Affected Classes</span>
+                        <div className="max-h-24 overflow-y-auto space-y-1 font-mono text-[9px] text-success">
+                          {impactAnalysis.affected_classes.map((c, idx) => (
+                            <div key={idx} className="truncate" title={c.name || c.id}>{c.name || c.id}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {impactAnalysis.affected_endpoints && impactAnalysis.affected_endpoints.length > 0 && (
+                      <div className="bg-secondary-bg border border-border p-2 rounded">
+                        <span className="text-[9px] text-secondary-text block mb-1 uppercase font-semibold">Affected Endpoints</span>
+                        <div className="max-h-24 overflow-y-auto space-y-1 font-mono text-[9px] text-danger">
+                          {impactAnalysis.affected_endpoints.map((ep, idx) => (
+                            <div key={idx} className="truncate" title={ep.name || ep.id}>{ep.name || ep.id}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-secondary-text">No blast radius telemetry computed.</div>
+                )}
               </div>
             </div>
           ) : (
