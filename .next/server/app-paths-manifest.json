@@ -1,11 +1,9 @@
 {
-  "/architecture/page": "app/architecture/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/repositories/page": "app/repositories/page.js",
+  "/architecture/page": "app/architecture/page.js",
   "/technical-debt/page": "app/technical-debt/page.js",
   "/pull-requests/page": "app/pull-requests/page.js",
   "/developers/page": "app/developers/page.js",
   "/sprint-planning/page": "app/sprint-planning/page.js",
-  "/automation/page": "app/automation/page.js",
-  "/agent-console/page": "app/agent-console/page.js"
+  "/repositories/page": "app/repositories/page.js"
 }

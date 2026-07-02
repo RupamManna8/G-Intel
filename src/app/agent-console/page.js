@@ -16,6 +16,77 @@ import {
 } from 'lucide-react';
 import { fetchWithAuth } from '../../lib/api';
 
+const parseInline = (text) => {
+  if (!text) return "";
+  const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={idx} className="font-bold text-primary-text">{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={idx} className="bg-[#111827] border border-border px-1.5 py-0.5 rounded font-mono text-[11px] text-info">{part.slice(1, -1)}</code>;
+    }
+    return part;
+  });
+};
+
+const renderMarkdown = (text) => {
+  if (!text) return null;
+  const parts = text.split(/(```[\s\S]*?```)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('```') && part.endsWith('```')) {
+      const content = part.slice(3, -3);
+      const lines = content.split('\n');
+      const lang = lines[0].trim();
+      const code = lines.slice(1).join('\n');
+      return (
+        <pre key={index} className="bg-[#070A0F] border border-border p-4 rounded-lg my-3 overflow-x-auto font-mono text-xs text-primary-text leading-relaxed">
+          {lang && <div className="text-[10px] text-secondary-text uppercase mb-2 font-bold font-sans">{lang}</div>}
+          <code>{code}</code>
+        </pre>
+      );
+    }
+    
+    const lines = part.split('\n');
+    return lines.map((line, lineIndex) => {
+      const trimmed = line.trim();
+      if (line.startsWith('# ')) {
+        return <h1 key={`${index}-${lineIndex}`} className="text-base font-black text-primary-text mt-4 mb-2 uppercase tracking-wider border-b border-border/30 pb-1">{parseInline(line.slice(2))}</h1>;
+      }
+      if (line.startsWith('## ')) {
+        return <h2 key={`${index}-${lineIndex}`} className="text-sm font-bold text-primary-text mt-3.5 mb-2 uppercase tracking-wide">{parseInline(line.slice(3))}</h2>;
+      }
+      if (line.startsWith('### ')) {
+        return <h3 key={`${index}-${lineIndex}`} className="text-xs font-bold text-info mt-3 mb-1.5 uppercase">{parseInline(line.slice(4))}</h3>;
+      }
+      if (line.startsWith('#### ')) {
+        return <h4 key={`${index}-${lineIndex}`} className="text-xs font-bold text-primary-text mt-2.5 mb-1">{parseInline(line.slice(5))}</h4>;
+      }
+      
+      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        const cleanLine = trimmed.slice(2);
+        return (
+          <ul key={`${index}-${lineIndex}`} className="list-disc list-inside ml-4 my-1 text-secondary-text leading-relaxed">
+            <li>{parseInline(cleanLine)}</li>
+          </ul>
+        );
+      }
+      if (/^\d+\.\s/.test(trimmed)) {
+        const cleanLine = trimmed.replace(/^\d+\.\s/, '');
+        return (
+          <ol key={`${index}-${lineIndex}`} className="list-decimal list-inside ml-4 my-1 text-secondary-text leading-relaxed">
+            <li>{parseInline(cleanLine)}</li>
+          </ol>
+        );
+      }
+      if (trimmed === '') {
+        return <div key={`${index}-${lineIndex}`} className="h-2" />;
+      }
+      return <p key={`${index}-${lineIndex}`} className="my-1.5 text-secondary-text leading-relaxed">{parseInline(line)}</p>;
+    });
+  });
+};
+
 export default function AgentConsole() {
   const [activeRepoId, setActiveRepoId] = useState(null);
   const [activeRepoName, setActiveRepoName] = useState("");
@@ -261,8 +332,8 @@ export default function AgentConsole() {
                 <h3 className="text-xs font-semibold text-secondary-text uppercase tracking-wider border-b border-border pb-2">
                   AI Engineering Answer
                 </h3>
-                <div className="text-xs text-primary-text leading-relaxed whitespace-pre-wrap font-geist bg-secondary-bg/50 p-4 border border-border rounded">
-                  {qaResponse.response}
+                <div className="text-xs text-primary-text leading-relaxed font-geist bg-secondary-bg/50 p-6 border border-border rounded space-y-2">
+                  {renderMarkdown(qaResponse.response)}
                 </div>
               </div>
             )}
@@ -415,8 +486,8 @@ export default function AgentConsole() {
               <div className="flex items-center gap-2 text-success font-semibold text-xs border-b border-border pb-3 uppercase tracking-wider">
                 <CheckCircle className="h-4.5 w-4.5" /> Supervisor Execution Report Summary
               </div>
-              <div className="text-xs text-primary-text leading-relaxed whitespace-pre-wrap font-mono bg-secondary-bg/50 p-4 border border-border rounded overflow-x-auto max-h-[400px]">
-                {agentReport.response_markdown}
+              <div className="text-xs text-primary-text leading-relaxed font-geist bg-secondary-bg/50 p-6 border border-border rounded overflow-y-auto max-h-[400px] space-y-2">
+                {renderMarkdown(agentReport.response_markdown)}
               </div>
             </div>
           )}

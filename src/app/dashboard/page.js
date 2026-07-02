@@ -21,6 +21,8 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [repoStatus, setRepoStatus] = useState(null);
   const [allRepos, setAllRepos] = useState([]);
+  const [syncing, setSyncing] = useState(false);
+  const [leftTab, setLeftTab] = useState("activity"); // "activity" or "commits"
 
   // Telemetry state
   const [archMetrics, setArchMetrics] = useState(null);
@@ -50,31 +52,9 @@ export default function Dashboard() {
     }
   };
 
-  const handleContextChange = (e) => {
-    const selectedId = e.target.value;
-    if (selectedId === "all") {
-      localStorage.setItem("active_repo_id", "all");
-      localStorage.setItem("active_repo_name", "All Repositories");
-      setActiveRepoId("all");
-      setActiveRepoName("All Repositories");
-      fetchDashboardData("all");
-      window.dispatchEvent(new Event("storage"));
-    } else {
-      const selectedRepo = allRepos.find(r => r.id === selectedId);
-      if (selectedRepo) {
-        localStorage.setItem("active_repo_id", selectedRepo.id);
-        localStorage.setItem("active_repo_name", selectedRepo.full_name);
-        setActiveRepoId(selectedRepo.id);
-        setActiveRepoName(selectedRepo.full_name);
-        fetchDashboardData(selectedRepo.id);
-        window.dispatchEvent(new Event("storage"));
-      }
-    }
-  };
-
-  const fetchDashboardData = async (repoId) => {
+  const fetchDashboardData = async (repoId, silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
 
       // Fetch repository status first
@@ -101,25 +81,52 @@ export default function Dashboard() {
       console.error(err);
       setError("Failed to fetch analytics telemetry from backend.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let intervalId;
+    if (activeRepoId && repoStatus && (repoStatus.onboarding_status === "SCANNING" || repoStatus.onboarding_status === "PENDING")) {
+      intervalId = setInterval(() => {
+        fetchDashboardData(activeRepoId, true);
+      }, 4000);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [activeRepoId, repoStatus]);
 
   const triggerScan = async () => {
     try {
       setLoading(true);
       setError(null);
-      await fetchWithAuth("/repositories/onboard", {
-        method: "POST",
-        body: JSON.stringify({ 
-          full_name: activeRepoName 
-        })
+      await fetchWithAuth(`/repositories/${activeRepoId}/analyze`, {
+        method: "POST"
       });
       await fetchDashboardData(activeRepoId);
     } catch (err) {
       console.error(err);
       setError(`Failed to trigger scan for ${activeRepoName}.`);
       setLoading(false);
+    }
+  };
+
+  const handleSyncCommits = async () => {
+    try {
+      setSyncing(true);
+      setError(null);
+      await fetchWithAuth(`/repositories/${activeRepoId}/sync`, {
+        method: "POST"
+      });
+      // Let fast sync complete in background, reload after a short delay
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      await fetchDashboardData(activeRepoId);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to trigger fast commits sync.");
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -303,7 +310,10 @@ export default function Dashboard() {
     const weeks = [];
     let currentWeek = [];
     dates.forEach((date, index) => {
-      const dateStr = date.toISOString().split('T')[0];
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
       const count = commitCountsByDate[dateStr] || 0;
       currentWeek.push({ date, dateStr, count });
       
@@ -352,21 +362,19 @@ export default function Dashboard() {
           <h2 className="text-lg font-bold text-primary-text font-mono text-info">{activeRepoName}</h2>
         </div>
         <div className="flex items-center gap-4">
-          <select 
-            value={activeRepoId || "all"} 
-            onChange={handleContextChange}
-            className="bg-secondary-bg border border-border text-primary-text text-xs rounded px-3 py-2 focus:outline-none focus:border-info font-medium cursor-pointer"
+          <button
+            onClick={handleSyncCommits}
+            disabled={syncing}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-info hover:bg-info/90 disabled:opacity-50 text-primary-text font-bold text-xs rounded transition-colors"
           >
-            <option value="all">All Repositories</option>
-            {allRepos.map(r => (
-              <option key={r.id} value={r.id}>{r.full_name}</option>
-            ))}
-          </select>
+            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? "Syncing..." : "Sync Commits"}
+          </button>
           <Link 
             href="/repositories" 
-            className="text-xs text-info hover:underline font-bold uppercase tracking-wider"
+            className="px-3 py-2 bg-secondary-bg border border-border text-xs text-primary-text hover:bg-card rounded font-bold uppercase tracking-wider text-center"
           >
-            Manage
+            Manage Repositories
           </Link>
         </div>
       </div>
@@ -470,37 +478,88 @@ export default function Dashboard() {
 
       {/* Middle Section: Commit and PR lists */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-        {/* Contributor Commit Activity Chart */}
+        {/* Commit Intelligence Card with tabs */}
         <div className="rounded-lg bg-card border border-border p-6">
-          <h2 className="text-sm font-semibold tracking-wide text-primary-text uppercase mb-4">
-            Contributor Commit Activity
-          </h2>
-          {productivity.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-xs text-secondary-text border border-dashed border-border rounded">
-              No commit activity data available.
+          <div className="flex justify-between items-center mb-4 border-b border-border pb-2">
+            <h2 className="text-sm font-semibold tracking-wide text-primary-text uppercase">
+              Commit Intelligence
+            </h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setLeftTab("activity")}
+                className={`px-2.5 py-1 text-[10px] font-bold rounded uppercase tracking-wider transition-colors ${
+                  leftTab === "activity"
+                    ? "bg-info text-primary-text"
+                    : "bg-secondary-bg border border-border text-secondary-text hover:text-primary-text"
+                }`}
+              >
+                Activity
+              </button>
+              <button
+                onClick={() => setLeftTab("commits")}
+                className={`px-2.5 py-1 text-[10px] font-bold rounded uppercase tracking-wider transition-colors ${
+                  leftTab === "commits"
+                    ? "bg-info text-primary-text"
+                    : "bg-secondary-bg border border-border text-secondary-text hover:text-primary-text"
+                }`}
+              >
+                Recent Commits
+              </button>
             </div>
+          </div>
+
+          {leftTab === "activity" ? (
+            productivity.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-xs text-secondary-text border border-dashed border-border rounded">
+                No commit activity data available.
+              </div>
+            ) : (
+              <div className="h-64 flex flex-col justify-end space-y-2">
+                <div className="flex items-end justify-around h-48 px-4">
+                  {productivity.map((p, idx) => {
+                    const maxCommits = Math.max(...productivity.map(x => x.commits_count), 1);
+                    const pct = Math.round((p.commits_count / maxCommits) * 100);
+                    return (
+                      <div key={p.username || idx} className="flex flex-col items-center space-y-2 w-16">
+                        <div className="text-[9px] text-primary-text font-bold mb-1">{p.commits_count} commits</div>
+                        <div className="w-8 bg-info rounded-t-sm transition-all duration-500" style={{ height: `${Math.max(pct, 5)}%` }}></div>
+                        <span className="text-[10px] text-secondary-text truncate w-full text-center" title={p.username}>
+                          {p.username}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="border-t border-border pt-4 flex justify-between text-xs text-secondary-text">
+                  <span>Active contributor commit breakdown</span>
+                  <span className="text-success font-semibold">{productivity.length} contributors</span>
+                </div>
+              </div>
+            )
           ) : (
-            <div className="h-64 flex flex-col justify-end space-y-2">
-              <div className="flex items-end justify-around h-48 px-4">
-                {productivity.map((p, idx) => {
-                  const maxCommits = Math.max(...productivity.map(x => x.commits_count), 1);
-                  const pct = Math.round((p.commits_count / maxCommits) * 100);
-                  return (
-                    <div key={p.username || idx} className="flex flex-col items-center space-y-2 w-16">
-                      <div className="text-[9px] text-primary-text font-bold mb-1">{p.commits_count} commits</div>
-                      <div className="w-8 bg-info rounded-t-sm transition-all duration-500" style={{ height: `${Math.max(pct, 5)}%` }}></div>
-                      <span className="text-[10px] text-secondary-text truncate w-full text-center" title={p.username}>
-                        {p.username}
+            commits.length === 0 ? (
+              <div className="h-64 flex items-center justify-center text-xs text-secondary-text border border-dashed border-border rounded">
+                No commits found in git history.
+              </div>
+            ) : (
+              <div className="h-64 overflow-y-auto space-y-3 pr-1">
+                {commits.slice(0, 10).map((commit, idx) => (
+                  <div key={commit.sha || idx} className="p-3 bg-secondary-bg border border-border rounded flex justify-between items-center text-xs">
+                    <div className="min-w-0 flex-1 pr-3">
+                      <h4 className="font-bold text-primary-text truncate" title={commit.message}>
+                        {commit.message}
+                      </h4>
+                      <span className="text-[10px] text-secondary-text block mt-1">
+                        By <strong>{commit.author_name}</strong> • {new Date(commit.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                  );
-                })}
+                    <span className="px-2 py-1 bg-secondary-bg border border-border font-mono text-[9px] text-info rounded select-all">
+                      {commit.sha.substring(0, 7)}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <div className="border-t border-border pt-4 flex justify-between text-xs text-secondary-text">
-                <span>Active contributor commit breakdown</span>
-                <span className="text-success font-semibold">{productivity.length} contributors</span>
-              </div>
-            </div>
+            )
           )}
         </div>
 

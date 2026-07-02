@@ -14,16 +14,16 @@ export default function Repositories() {
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
-  const loadOnboardedRepos = async () => {
+  const loadOnboardedRepos = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await fetchWithAuth("/repositories");
       setRepos(data);
     } catch (err) {
       console.error(err);
-      setError("Failed to fetch onboarded repositories.");
+      if (!silent) setError("Failed to fetch onboarded repositories.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -48,6 +48,19 @@ export default function Repositories() {
     }
   }, []);
 
+  useEffect(() => {
+    let intervalId;
+    const hasActiveScans = repos.some(r => r.onboarding_status === "SCANNING" || r.onboarding_status === "PENDING");
+    if (hasActiveScans) {
+      intervalId = setInterval(() => {
+        loadOnboardedRepos(true);
+      }, 5000);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [repos]);
+
   const handleOnboard = async (repoName, installationId = null) => {
     if (!repoName.trim()) return;
 
@@ -68,7 +81,7 @@ export default function Repositories() {
         return [...prev, newRepo];
       });
       
-      setSuccessMsg(`Successfully queued onboarding scan for ${repoName}.`);
+      setSuccessMsg(`Successfully registered ${repoName}. Click Analyze to start scanning.`);
       setInputName("");
       
       if (!activeRepoId) {
@@ -76,10 +89,26 @@ export default function Repositories() {
       }
       
       setTimeout(() => setSuccessMsg(null), 4000);
-      setTimeout(loadOnboardedRepos, 3000);
+      setTimeout(() => loadOnboardedRepos(true), 1000);
     } catch (err) {
       console.error(err);
       setError(`Failed to onboard ${repoName}. Verify that your GitHub App has access to this repository.`);
+    }
+  };
+
+  const handleAnalyze = async (repoId, repoName) => {
+    try {
+      setError(null);
+      setSuccessMsg(null);
+      await fetchWithAuth(`/repositories/${repoId}/analyze`, {
+        method: "POST"
+      });
+      setSuccessMsg(`Successfully started analysis scan for ${repoName}.`);
+      loadOnboardedRepos(true);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err) {
+      console.error(err);
+      setError(`Failed to trigger analysis scan for ${repoName}.`);
     }
   };
 
@@ -202,13 +231,23 @@ export default function Repositories() {
                                   Select Active
                                 </button>
                               )}
-                              <button
-                                onClick={() => handleOnboard(repo.full_name, repo.installation_id)}
-                                className="px-2.5 py-1 bg-secondary-bg text-primary-text border border-border font-bold text-[10px] rounded hover:bg-card flex items-center gap-1.5 transition-colors"
-                                title="Re-run scanning engine"
-                              >
-                                <RefreshCw className="h-3 w-3" /> Sync
-                              </button>
+                               {repo.onboarding_status === "PENDING" ? (
+                                <button
+                                  onClick={() => handleAnalyze(repo.id, repo.full_name)}
+                                  className="px-2.5 py-1 bg-info hover:bg-info/90 text-primary-text font-bold text-[10px] rounded flex items-center gap-1.5 transition-colors"
+                                  title="Trigger scanning & analysis"
+                                >
+                                  <RefreshCw className="h-3 w-3" /> Analyze
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleAnalyze(repo.id, repo.full_name)}
+                                  className="px-2.5 py-1 bg-secondary-bg text-primary-text border border-border font-bold text-[10px] rounded hover:bg-card flex items-center gap-1.5 transition-colors"
+                                  title="Re-run scanning engine"
+                                >
+                                  <RefreshCw className="h-3 w-3" /> Sync
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
